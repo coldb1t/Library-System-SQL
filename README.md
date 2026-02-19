@@ -4,6 +4,8 @@ A relational database for managing a multi-branch library system — books, memb
 
 Built with PostgreSQL. Includes schema, sample data, and 24 queries covering a wide range of SQL features.
 
+Project was made in 2024.
+
 Tested on [Railway](https://railway.app).
 
 ![Conceptual Schema](conceptual_schema.png)
@@ -16,15 +18,15 @@ Tested on [Railway](https://railway.app).
 | `insert.sql` | Populates tables with sample data (15 branches, 16 books, 15 members, 15 staff) |
 
 ## Schema (9 tables)
-
-- **Author / Publisher** — book metadata
-- **Book** — original book records
-- **Book_copy** — physical copies tied to branches, with availability status
-- **Library_branch** — branch locations
-- **Library_member** — registered members with loan history counters
-- **Staff_member** — employees assigned to branches
-- **Loan** — tracks who borrowed what, when, and whether it's been returned
-- **Reservation** — pending reservations on book copies
+- `Author` - Basic information about `Book`'s author
+- `Publisher` — Basic information about `Book`'s publisher
+- `Book` — Information about original book
+- `Book_copy` — Information about physical copy/copies of a `Book` including its availability
+- `Library_branch` — Library's branch where physical books (`Book_copy`) can be borrowed, reserved and returned
+- `Library_member` — Registered library members with loan history counters (delayed or loans returned in time) and their contact details
+- `Staff_member` — Employees assigned to branches
+- `Loan` — Tracks who borrowed which book copy (`Book_copy`), when, return deadline and whether it has been returned
+- `Reservation` — Reservations on book copies
 
 The key design decision is separating `Book` from `Book_copy` — a single book can have multiple physical copies across different branches.
 
@@ -71,26 +73,7 @@ D18, D19, D24 are the same query written three different ways (JOIN, VIEW, corre
 
 ## Queries
 
-### D1 — All available Fiction books in a given branch
-
-**RA:**
-
-```
-{
-    {
-        book_copy * book * author
-    }
-    [title, genre, name→author_name, surname→author_surname, status, branch_id]
-    (branch_id=1 ∧ status = 'Available')
-}
-*
-{
-    library_branch[branch_id, name→branch_name]
-}
-```
-
-**SQL:**
-
+### D1 — All available books in a given branch
 ```sql
 SELECT DISTINCT *
 FROM (
@@ -118,20 +101,6 @@ NATURAL JOIN (
 ---
 
 ### D2 — All available books by a specific author in a given branch
-
-**RA:**
-
-```
-{
-    book_copy * book * author
-}
-[title, genre, name→author_name, surname→author_surname, status, branch_id]
-(status = 'Available' ∧ author_name='John' ∧ author_surname='Smith' ∧ branch_id = 1)
-* library_branch[branch_id, name→branch_name]
-```
-
-**SQL:**
-
 ```sql
 SELECT DISTINCT *
 FROM (
@@ -159,25 +128,6 @@ NATURAL JOIN (
 ---
 
 ### D3 — Currently loaned books by members registered for more than 1 year
-
-**RA:**
-
-```
-{
-    loan[member_id, copy_id]
-    *
-    book_copy[copy_id, book_id, status]
-    *
-    book[book_id, genre, title]
-    *
-    library_member[member_id, name, surname, date_start]
-}
-(status='On Loan' ∧ '1.1.2025' - date_start >= 365)
-[name, surname, title, genre, date_start]
-```
-
-**SQL:**
-
 ```sql
 SELECT DISTINCT name,
                 surname,
@@ -214,20 +164,7 @@ WHERE status = 'On Loan' AND TO_DATE('01.01.2025','dd.mm.yyyy') - date_start >= 
 
 ---
 
-### D4 — All available books at a branch by address
-
-**RA:**
-
-```
-{
-    book_copy * book * library_branch
-}
-(status='Available' ∧ address = '600 Center St')
-[title, address, status]
-```
-
-**SQL:**
-
+### D4 — All available books at a branch by address 
 ```sql
 SELECT DISTINCT title,
                 address,
@@ -241,24 +178,6 @@ WHERE status = 'Available' AND address = '600 Center St';
 ---
 
 ### D5 — All available book copies with their authors
-
-**RA:**
-
-```
-{
-    {
-        book_copy(status='Available')
-        *
-        book
-        *
-        author
-    }
-}
-[title, genre, name→author_name, surname→author_surname]
-```
-
-**SQL:**
-
 ```sql
 SELECT DISTINCT
     BOOK.title,
@@ -276,9 +195,6 @@ WHERE BOOK_COPY.status = 'Available'
 ---
 
 ### D6 — Members with a specific number of active loans
-
-**SQL:**
-
 ```sql
 SELECT
     LIBRARY_MEMBER.member_id,
@@ -302,9 +218,6 @@ HAVING
 ---
 
 ### D7 — Number of reservations for a specific book
-
-**SQL:**
-
 ```sql
 SELECT
     BOOK.book_id,
@@ -325,9 +238,6 @@ GROUP BY
 ---
 
 ### D8 — Staff member who processed the most loans in a given period
-
-**SQL:**
-
 ```sql
 SELECT LOAN.staff_id, name, surname, COUNT(loan_id) AS loan_count
 FROM LOAN
@@ -341,9 +251,6 @@ LIMIT 1;
 ---
 
 ### D9 — Update branch address by branch name
-
-**SQL:**
-
 ```sql
 UPDATE LIBRARY_BRANCH
 SET address = '900 Main Street'
@@ -357,9 +264,6 @@ WHERE branch_id = (
 ---
 
 ### D10 — Authors who wrote more than 1 book
-
-**SQL:**
-
 ```sql
 SELECT name, surname
 FROM AUTHOR
@@ -374,15 +278,6 @@ WHERE author_id IN (
 ---
 
 ### D11 — Members who never made a reservation
-
-**RA:**
-
-```
-library_member \ {library_member <* reservation}
-```
-
-**SQL:**
-
 ```sql
 SELECT DISTINCT *
 FROM LIBRARY_MEMBER
@@ -404,9 +299,6 @@ NATURAL JOIN RESERVATION;
 ---
 
 ### D12 — All books with their reservation count
-
-**SQL:**
-
 ```sql
 SELECT
     BOOK.title,
@@ -422,9 +314,6 @@ LEFT JOIN
 ---
 
 ### D13 — All members and their loans (including members with no loans)
-
-**SQL:**
-
 ```sql
 SELECT
     LIBRARY_MEMBER.member_id,
@@ -441,9 +330,6 @@ FULL OUTER JOIN
 ---
 
 ### D14 — Members who currently have no active loans
-
-**SQL:**
-
 ```sql
 SELECT
     LIBRARY_MEMBER.member_id,
@@ -463,21 +349,6 @@ WHERE
 ---
 
 ### D15 — Unique list of books that are loaned or reserved
-
-**RA:**
-
-```
-{
-    book * book_copy(status='On Loan')
-}[title, book_id]
-∪
-{
-    reservation * book_copy * book
-}[title, book_id]
-```
-
-**SQL:**
-
 ```sql
 SELECT DISTINCT title,
                 book_id
@@ -498,9 +369,6 @@ NATURAL JOIN BOOK;
 ---
 
 ### D16 — Delete all copies of a specific book
-
-**SQL:**
-
 ```sql
 DELETE FROM BOOK_COPY
 WHERE book_id IN (
@@ -513,31 +381,6 @@ WHERE book_id IN (
 ---
 
 ### D17 — Books that are both loaned and reserved
-
-**RA:**
-
-```
-{
-    book[book_id, title]
-    *
-    book_copy
-    *
-    reservation
-}[book_id, title]
-∩
-{
-    {
-        book[book_id, title]
-        *
-        book_copy
-    }
-    (status='On Loan')
-    [book_id, title]
-}
-```
-
-**SQL:**
-
 ```sql
 SELECT DISTINCT book_id,
                 title
@@ -555,9 +398,6 @@ WHERE status = 'On Loan';
 ---
 
 ### D18 — Staff with more than 1 loan processed (J1 — JOIN)
-
-**SQL:**
-
 ```sql
 SELECT LOAN.staff_id, name, surname, COUNT(loan_id) AS loan_count
 FROM LOAN
@@ -571,9 +411,6 @@ ORDER BY loan_count DESC;
 ---
 
 ### D19 — Staff with more than 1 loan processed (J2 — VIEW)
-
-**SQL:**
-
 ```sql
 CREATE OR REPLACE VIEW EMPLOYEE_WITH_MORE_THAN_1_LOAN AS
 SELECT LOAN.staff_id, name, surname, COUNT(loan_id) AS loan_count
@@ -591,9 +428,6 @@ ORDER BY loan_count DESC;
 ---
 
 ### D20 — Insert copies of all Fiction books into branch 5
-
-**SQL:**
-
 ```sql
 INSERT INTO book_copy (copy_id, book_id, branch_id, status)
 SELECT
@@ -608,22 +442,6 @@ WHERE b.genre = 'Fiction';
 ---
 
 ### D21 — All books currently loaned by a specific member
-
-**RA:**
-
-```
-{
-    loan[member_id, load_date, return_due, copy_id]
-    *
-    book_copy[book_id, copy_id]
-    *
-    book[book_id, genre, title]
-}
-(member_id = 5)
-```
-
-**SQL:**
-
 ```sql
 SELECT DISTINCT *
 FROM (
@@ -650,25 +468,6 @@ WHERE member_id = 5;
 ---
 
 ### D22 — All available books with their branch address
-
-**RA:**
-
-```
-{
-    {
-        book_copy[book_id, branch_id, status]
-        (status='Available')
-        *
-        book
-    }
-    *
-    library_branch
-}
-[title, genre, address]
-```
-
-**SQL:**
-
 ```sql
 SELECT DISTINCT title,
                 genre,
@@ -690,9 +489,6 @@ NATURAL JOIN LIBRARY_BRANCH;
 ---
 
 ### D23 — Overdue loans with member info
-
-**SQL:**
-
 ```sql
 SELECT name, surname, title, return_due, CURRENT_DATE AS date_today
 FROM loan
@@ -706,9 +502,6 @@ WHERE loan.return_due < CURRENT_DATE
 ---
 
 ### D24 — Staff with more than 1 loan processed (J3 — correlated subquery)
-
-**SQL:**
-
 ```sql
 SELECT DISTINCT
     staff_id,
